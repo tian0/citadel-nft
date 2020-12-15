@@ -5,7 +5,7 @@ installed, you can uninstall the existing version with `npm uninstall -g truffle
 with `npm install -g truffle`.
 */
 let Membership = artifacts.require('Membership.sol')
-let { catchRevert } = require("./exceptionsHelpers.js")
+let { catchRevert, catchInvalidOpcode } = require("./exceptionsHelpers.js")
 
 contract('Membership', function(accounts) {
 
@@ -13,42 +13,51 @@ contract('Membership', function(accounts) {
     const alice = accounts[1]
     const bob = accounts[2]
     const chad = accounts[3]
+    const donee = accounts[5]
+    const donationAmount = web3.utils.toWei('0.01', 'ether')
 
     let instance
 
     beforeEach(async () => {
-      instance = await Membership.new()
+      instance = await Membership.new(donee, donationAmount, {from: owner})
     })
 
     it("should make Owner a member upon deployment", async() => {
-      const checkOwner = await instance.enrolled.call(owner);
-      assert.equal(checkOwner, true, 'Owner does not match the expected member address value')
+        await instance.newMember({from: owner, value: donationAmount})
+        const checkOwner = await instance.enrolled.call(owner);
+        assert.equal(checkOwner, true, 'Owner does not match the expected member address value')
     })
 
     it("should emit a LogMember event when a new member is added", async()=> {
         let eventEmitted = false     
-        const tx = await instance.newMember({from: alice})
-        if (tx.logs[0].event == "LogMember") {
+        const tx = await instance.newMember({from: alice, value: donationAmount})
+        if (tx.logs[1].event == "LogMember") {
             eventEmitted = true
         }
         assert.equal(eventEmitted, true, 'adding a member should emit a LogMember event')
     })
 
-    it("should emit a LogGift event when a new membership is gifted", async()=> {
-        let eventEmitted = false
-        const tx = await instance.giftMembership(alice, {from: owner})
-        if (tx.logs[0].event == "LogGift") {
-            eventEmitted = true
+    it("should emit a LogGift and LogMember event when a new membership is gifted", async()=> {
+        let giftEventEmitted = false
+        let memberEventEmitted = false
+        await instance.newMember({from: owner, value: donationAmount})
+        const tx = await instance.giftMembership(alice, {from: owner, value: donationAmount})
+        if (tx.logs[1].event == "LogGift") {
+            giftEventEmitted = true
         }
-        assert.equal(eventEmitted, true, 'gifting membership should emit a LogGift event')
+        if (tx.logs[2].event == "LogMember") {
+            memberEventEmitted = true
+        }
+        assert.equal(giftEventEmitted, true, 'gifting membership should emit a LogGift event')
+        assert.equal(memberEventEmitted, true, 'gifting membership should emit a LogMember event')
     })
 
     it("should allow Alice, Bob and Chad to become members", async() => {
-        await instance.newMember({from: alice});
+        await instance.newMember({from: alice, value: donationAmount});
         const checkAlice = await instance.enrolled.call(alice);
-        await instance.newMember({from: bob})
+        await instance.newMember({from: bob, value: donationAmount})
         const checkBob = await instance.enrolled.call(bob);
-        await instance.newMember({from: chad})
+        await instance.newMember({from: chad, value: donationAmount})
         const checkChad = await instance.enrolled.call(chad);
 
         const tokenIdAlice = await instance.tokenId(alice);
@@ -68,9 +77,9 @@ contract('Membership', function(accounts) {
     })
 
     it("should allow Owner to remove a member", async() => {
-        await instance.newMember({from: alice});
-        await instance.newMember({from: bob});
-        await instance.newMember({from: chad});
+        await instance.newMember({from: alice, value: donationAmount});
+        await instance.newMember({from: bob, value: donationAmount});
+        await instance.newMember({from: chad, value: donationAmount});
 
         const theMembersBefore = await instance.getMembers({from: owner});
         await instance.removeMember(bob, {from: owner});
@@ -83,23 +92,32 @@ contract('Membership', function(accounts) {
     })
 
     it("should error if address that is not Owner tries to remove a member", async() => {
-        await instance.newMember({from: alice});
-        await instance.newMember({from: bob});
-        await instance.newMember({from: chad});
+        await instance.newMember({from: alice, value: donationAmount});
+        await instance.newMember({from: bob, value: donationAmount});
+        await instance.newMember({from: chad, value: donationAmount});
 
-        // const theMembersBefore = await instance.getMembers({from: alice});
         await catchRevert(instance.removeMember(bob, {from: alice}));
-        // const theMembersAfter = await instance.getMembers({from: alice});
     })
 
     it("should error if address that is not a member tries to gift membership", async() => {
-        await catchRevert(instance.giftMembership(alice, {from: bob}));
+        await catchInvalidOpcode(instance.giftMembership(alice, {from: bob, value: donationAmount}));
     })
 
     it("should not allow member to transfer token", async() => {
-        await instance.newMember({from: alice});
+        await instance.newMember({from: alice, value: donationAmount});
         const tokenIdAlice = await instance.tokenId(alice);
-        const tx = await catchRevert(instance.transferFrom(alice, owner, tokenIdAlice));
+        await catchRevert(instance.transferFrom(alice, owner, tokenIdAlice));
+    })
+    it("should credit donationBalance to charity", async() => {
+        await instance.newMember({from: bob, value: donationAmount});
+        await instance.withdraw({from:donee})
+        const donationBalanceAfter = await instance.donationBalance();
+
+        await assert.equal(donationBalanceAfter, 0, 'donationBalance is non-zero after withdrawal')
+    })
+    it("should not allow donationBalance withdrawal to address other than charity", async() => {
+        await instance.newMember({from: chad, value: donationAmount});
+
+        await catchRevert(instance.withdraw({from:owner}))
     })
 })
-

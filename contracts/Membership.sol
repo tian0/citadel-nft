@@ -10,16 +10,20 @@ import "@openzeppelin/contracts/lifecycle/Pausable.sol";
 /// @dev All function calls are currently implemented without side effects
 contract Membership is ERC721, Ownable, Pausable {
 
-    constructor() public {
+    address payable public charity;
+    uint public donation;
+
+    constructor(address payable _charity, uint _donation) public {
+        charity = _charity;
+        donation = _donation;
         owner();
-        newMember();
     }
 
     address[] public members;
     mapping (address => uint) public tokenId;
     mapping (address => bool) public enrolled;
+    uint public donationBalance;
 
-    
     modifier notMember (address _address) { 
         require (!enrolled[_address]); 
         _;}
@@ -28,6 +32,10 @@ contract Membership is ERC721, Ownable, Pausable {
         address _member = members[_token];
         require (msg.sender == _member); 
         _;}
+    modifier isCharity (address _address) {
+        require(_address == charity);
+        _;
+    }
 
     event LogMember(address member);
     event LogGift(address member);
@@ -35,31 +43,54 @@ contract Membership is ERC721, Ownable, Pausable {
     /// @notice Enroll new member only if they are not already enrolled
     /// @dev Minted new member token approvals are not given, token becomes untransferrable and unsellable
     function newMember()
-    public notMember(msg.sender) whenNotPaused()
+    public payable 
+    notMember(msg.sender) whenNotPaused()
     {
-        require(members.length < 2**256-1 );
+        require(members.length < 2**256-1, 'member.length is almost overflowing');
+        require(msg.value >= donation, 'newMember did not donate enough');
+
         tokenId[msg.sender] = members.length;
         members.push(msg.sender);
-        emit LogMember(msg.sender);
         enrolled[msg.sender] = true;
+        donationBalance += donation;
 
         _mint(msg.sender, tokenId[msg.sender]);
+        emit LogMember(msg.sender);
     }
 
     /// @notice Gift membership to new member from existing member, only if they are not already enrolled
     /// @dev Minted new member token approvals are cleared, token becomes untransferrable and unsellable
     /// @param _member The new membership recipient address
     function giftMembership(address _member) 
-    public isMember(msg.sender) notMember(_member) whenNotPaused()
+    public payable 
+    isMember(msg.sender) notMember(_member) whenNotPaused()
     {
         require(members.length < 2**256-1 );
+        require(msg.value >= donation, 'newMember did not donate enough');
+
         tokenId[_member] = members.length;
         members.push(_member);
+        enrolled[_member] = true;
+        donationBalance += donation;
+        _mint(_member, tokenId[_member]);
+
         emit LogGift(_member);
         emit LogMember(_member);
-        enrolled[_member] = true;
+    }
 
-        _mint(_member, tokenId[_member]);
+    /// @notice Withdrawal Pattern for donationBalance into charity
+    /// @dev Will only withdraw to charity address and reset donationBalance to zero
+    /// @return bool if withdrawal successful
+    function withdraw()
+	public payable 
+    isCharity(msg.sender)
+	returns(bool)
+    {
+	    uint amount = donationBalance;
+	    donationBalance = 0;
+        (bool success, ) = charity.call.value(amount)("");
+        require(success);
+        return true;
     }
 
     /// @notice Get members address array
@@ -84,7 +115,8 @@ contract Membership is ERC721, Ownable, Pausable {
     /// @dev Only contract owner can remove member
     /// @param _member The existing member address to be removed
     function removeMember(address _member)
-    public onlyOwner()
+    public 
+    onlyOwner()
     {
         uint _token = tokenId[_member];
         enrolled[_member] = false;
@@ -95,12 +127,13 @@ contract Membership is ERC721, Ownable, Pausable {
     /// @notice Self-destruct or kill contract 
     /// @dev Only contract owner can kill contract
     function kill() 
-    public onlyOwner()
+    public 
+    onlyOwner()
     {
         selfdestruct(address(uint160(owner()))); // cast owner to address payable
     }
 
     function fallback() external payable {
-        revert();
+        // revert();
     }
 }

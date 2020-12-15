@@ -1,7 +1,6 @@
 import React, { Component } from "react";
 import MembershipContract from "./contracts/Membership.json";
 import getWeb3 from "./getWeb3";
-import ens from "../node_modules/ethereum-ens";
 import makeBlockie from "ethereum-blockies-base64";
 
 import "./App.css";
@@ -14,12 +13,15 @@ class App extends Component {
       isMember: false,
       tokenID: null,
       membersNumber: null,
+      isCharity: false,
+      donationBalance: null,
       donation: null,
       input: "",
       web3: null,
       contract: null,
       contractAddress: null,
       account: null,
+      charity: null,
       network: null,
       balance: null,
     };
@@ -79,18 +81,23 @@ class App extends Component {
     this.instantiateContract();
     const { account, contract } = this.state;
     const contract_address = contract._address;
-    this.setState({ contractAddress: contract_address });
+    const donation = await contract.methods.donation().call();
+    const charity = await contract.methods.charity().call();
+    this.setState({ contractAddress: contract_address, donation: donation, charity: charity });
+
     const contractOwner = await contract.methods.owner().call();
-    // Update state with the result.
     if (contractOwner === account) {
       this.setState({ isOwner: true });
+    }
+
+    const donationBalance = await contract.methods.donationBalance().call();
+    if (charity == account) {
+      this.setState({ isCharity: true, donationBalance: donationBalance })
     }
 
     const memberBalance = await contract.methods.balanceOf(account).call();
     const id = await contract.methods.tokenId(account).call();
     const count = await contract.methods.getMembersLength().call();
-
-    // Update state with the result.
     if (parseInt(memberBalance) > 0) {
       this.setState({ isMember: true, tokenID: id, membersNumber: count });
     }
@@ -98,28 +105,30 @@ class App extends Component {
 
   handleJoin(event) {
     this.instantiateContract();
-    const { account, contract } = this.state;
-
+    const { account, contract, donation } = this.state;
     contract.methods
       .newMember()
-      .send({ from: account })
+      .send({ from: account, value: donation })
       .then((result) => {
         return this.runConnect();
       });
   }
+
   handleAddressInput = (event) => {
     this.setState({ input: event.target.value });
-  };
+  }
+
   handleGift(event) {
     this.instantiateContract();
-    const { account, contract, input } = this.state;
+    const { account, contract, input, donation } = this.state;
     contract.methods
       .giftMembership(input)
-      .send({ from: account })
+      .send({ from: account, value: donation })
       .then((result) => {
         return this.runConnect();
       });
   }
+
   handleRemove(event) {
     this.instantiateContract();
     const { account, contract, input } = this.state;
@@ -130,6 +139,7 @@ class App extends Component {
         return this.runConnect();
       });
   }
+
   handlePause(event) {
     this.instantiateContract();
     const { account, contract } = this.state;
@@ -140,6 +150,7 @@ class App extends Component {
         return this.runConnect();
       });
   }
+
   handleUnpause(event) {
     this.instantiateContract();
     const { account, contract } = this.state;
@@ -150,11 +161,23 @@ class App extends Component {
         return this.runConnect();
       });
   }
+
   handleKill(event) {
     this.instantiateContract();
     const { account, contract } = this.state;
     contract.methods
       .kill()
+      .send({ from: account })
+      .then((result) => {
+        return this.runConnect();
+      });
+  }
+
+  handleWithdraw(event) {
+    this.instantiateContract();
+    const { account, contract } = this.state;
+    contract.methods
+      .withdraw()
       .send({ from: account })
       .then((result) => {
         return this.runConnect();
@@ -177,13 +200,14 @@ class App extends Component {
         <div className="isOwner">
           <div className="row">
             <h2>Your account owns this Membership contract!</h2>
-            <img src={makeBlockie(this.state.contractAddress)} />
             <p>Membership Contract Address: {this.state.contractAddress}</p>
-            <p>Your Account: {this.state.account}</p>
-            <p>Your ETH Balance: {this.state.balance} ETH</p>
-            <p>Your Membership tokenId is {this.state.tokenID} </p>
             <p>There are a total of {this.state.membersNumber} members</p>
-
+            <p>Charity Name: Rinkeby Demo</p>
+            <p>Charity Wallet: {this.state.charity}</p>
+            <img src={makeBlockie(this.state.contractAddress)} />
+            <p>Your Wallet: {this.state.account}</p>
+            <p>Your ETH Balance: {this.state.balance} ETH</p>
+            {/* <p>Your Membership tokenId is {this.state.tokenID} </p> */}
             <h3>Member Management</h3>
             <p>Enter an Ethereum Address:</p>
             <input
@@ -221,13 +245,14 @@ class App extends Component {
       return (
         <div className="App">
           <div className="row">
+            <p>Membership Contract: {this.state.contractAddress}</p>
+            <p>There are a total of {this.state.membersNumber} members</p>
             <img src={makeBlockie(this.state.contractAddress)} />
-            <p>Membership Contract Address: {this.state.contractAddress}</p>
-            <p>Your Account: {this.state.account}</p>
-
+            <p>Thank you for your donation to [CharityName]</p>
+            <p>Charity Wallet: {this.state.charity}</p>
+            <p>Your Wallet: {this.state.account}</p>
             <p>Your ETH Balance: {this.state.balance} ETH</p>
             <p>Your Membership tokenId is {this.state.tokenID} </p>
-            <p>There are a total of {this.state.membersNumber} members</p>
             <p>
               Network ID:{" "}
               {this.state.network ? `${this.state.network}` : "No connection"}
@@ -245,10 +270,34 @@ class App extends Component {
                   Gift Membership
                 </button>
               </div>
+              <br></br>
+              <img src='http://www.afrostateofmind.com/wp-content/uploads/2015/08/Members-only.png'
+              height='300' width='450'/>
             </div>
           </div>
         </div>
       );
+      else if (this.state.isCharity)
+      return (
+        <div className="App">
+          <div className="row">
+            <p>Membership Contract Address: {this.state.contractAddress}</p>
+            <p>There are a total of {this.state.membersNumber} members</p>
+            <img src={makeBlockie(this.state.contractAddress)}/>
+            <p>Welcome [CharityName]!</p>
+            <p>Your Charity's Wallet: {this.state.charity}</p>
+            <p>Your ETH Balance: {this.state.balance} ETH</p>
+            <p>
+              Network ID:{" "}
+              {this.state.network ? `${this.state.network}` : "No connection"}
+            </p>
+            <p>Charity Donations balance (available to withdraw): {this.state.donationBalance} Wei</p>
+            <button onClick={this.handleWithdraw.bind(this)}>
+                  Withdraw Donations
+                </button>
+          </div>
+        </div>
+      )
     else if (!this.state.isMember)
       return (
         <div className="notMember">
