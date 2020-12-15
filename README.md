@@ -23,7 +23,7 @@ npm install
 ```
 
 A contract deployment instance is available on Ethereum's Rinkeby testnet, at the following address: 
-`0x52B371514FcAb15D390d0B9dA5E6CF2D75Be3411`
+`0xCaD7D8863dC3A922A2B54Efb458023836cFdE37E`
 
 To deploy your own Membership contract instance in the terminal, run:
 ```bash
@@ -53,7 +53,7 @@ npm install
 npm run start
 ```
 
-With Metamask installed and connected to Rinkeby, you should be able to join an existing Membership contract on Rinkeby provided at `0x52B371514FcAb15D390d0B9dA5E6CF2D75Be3411`
+With Metamask installed and connected to Rinkeby, you should be able to join an existing Membership contract on Rinkeby provided at `0xCaD7D8863dC3A922A2B54Efb458023836cFdE37E`
 
 The member dashboard will allow you to see:
 1. Membership Contract Address
