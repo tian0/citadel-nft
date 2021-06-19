@@ -4,7 +4,7 @@ A simple Ethereum-based decentralized application (dapp) to create and obtain no
 
 ---
 
-![Citadel NFT](https://imgur.com/dIT8bYh.gif)
+![Citadel NFT]
 
 
 ## Prerequisites
@@ -23,7 +23,7 @@ npm install
 ```
 
 A contract deployment instance is available on Ethereum's Rinkeby testnet, at the following address: 
-`0xCaD7D8863dC3A922A2B54Efb458023836cFdE37E`
+`0x9333F09Df22efEb5B4ad87604528D267A3e3d9D5`
 
 To deploy your own Citadel contract instance on Rinkeby, first paste your own INFURA_PROJECT_ID and contract owner wallet MNEMONIC in the .env file, and in the terminal run:
 ```bash
@@ -53,7 +53,7 @@ npm install
 npm run start
 ```
 
-With Metamask installed and connected to Rinkeby, you should be able to join an existing Citadel contract on Rinkeby provided at `0xCaD7D8863dC3A922A2B54Efb458023836cFdE37E`
+With Metamask installed and connected to Rinkeby, once whitelisted you can join an existing Citadel contract on Rinkeby provided at `0x9333F09Df22efEb5B4ad87604528D267A3e3d9D5`
 
 The member dashboard will allow you to see:
 1. Citadel Contract Address & Citadel Name
