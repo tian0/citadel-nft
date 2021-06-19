@@ -3,8 +3,6 @@
 A simple Ethereum-based decentralized application (dapp) to create and obtain non-fungible membership tokens. Based on the [ERC-721](https://erc721.org) standard, these tokens are clear of user approvals making them nontransferable while also avoiding re-sale in secondary markets. Holding them in an ethereum wallet will grant access to the content enabled for token holders by the Citadel contract owner in their front-end and future Internet of Things integrations.
 
 ---
-[Citadel NFT]
-
 
 ## Prerequisites
 
