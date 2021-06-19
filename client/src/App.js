@@ -1,7 +1,7 @@
 import React, { Component } from "react";
-import MembershipContract from "./contracts/Membership.json";
+import CitadelContract from "./contracts/Citadel.json";
+import ERC20Contract from "./contracts/ERC20.json";
 import getWeb3 from "./getWeb3";
-import makeBlockie from "ethereum-blockies-base64";
 
 import "./App.css";
 
@@ -9,32 +9,34 @@ class App extends Component {
   constructor(props) {
     super(props);
     this.state = {
+      owner: null,
       isOwner: false,
+      isWhitelisted: false,
       isMember: false,
       tokenID: null,
       membersNumber: null,
-      isCharity: false,
-      donationBalance: null,
-      donation: null,
+      reserveBalance: null,
+      reserveCurrency: null,
+      contribution: null,
       input: "",
       web3: null,
       contract: null,
       contractAddress: null,
+      reserveInstance: null,
       account: null,
-      charity: null,
-      network: null,
+      citadelName: 'Mahalo Demo',
+      network: 4,
       balance: null,
+      gasUsed: null,
+      members: [],
     };
   }
 
   instantiateContract() {
     const contract = require("@truffle/contract");
-    const Membership = contract(MembershipContract);
-    Membership.setProvider(this.state.web3.currentProvider);
-    //declaring this for later so we can chain functions on Membership
-    var MembershipInstance;
-    Membership.deployed().then((instance) => {
-      MembershipInstance = instance;
+    const Citadel = contract(CitadelContract);
+    Citadel.setProvider(this.state.web3.currentProvider);
+    Citadel.deployed().then((instance) => {
       return instance;
     });
   }
@@ -49,11 +51,10 @@ class App extends Component {
       const balanceWei = await web3.eth.getBalance(accounts[0]);
       const balance = web3.utils.fromWei(balanceWei, "ether");
 
-      // Get the contract instance.
       const networkId = await web3.eth.net.getId();
-      const deployedNetwork = MembershipContract.networks[networkId];
+      const deployedNetwork = CitadelContract.networks[networkId];
       const instance = new web3.eth.Contract(
-        MembershipContract.abi,
+        CitadelContract.abi,
         deployedNetwork && deployedNetwork.address
       );
 
@@ -69,7 +70,6 @@ class App extends Component {
         this.runConnect
       );
     } catch (error) {
-      // Catch any errors for any of the above operations.
       alert(
         `Failed to load web3, accounts, or contract. Check console for details.`
       );
@@ -79,52 +79,74 @@ class App extends Component {
 
   runConnect = async () => {
     this.instantiateContract();
-    const { account, contract } = this.state;
-    const contract_address = contract._address;
-    const donation = await contract.methods.donation().call();
-    const charity = await contract.methods.charity().call();
-    this.setState({ contractAddress: contract_address, donation: donation, charity: charity });
-
+    const { web3, account, contract } = this.state;
     const contractOwner = await contract.methods.owner().call();
+    const contract_address = contract._address;
+    const contribution = await contract.methods.contribution().call();
+    const count = await contract.methods.getMembersLength().call();
+    const reserveCurrency = await contract.methods.reserveCurrency().call();
+    const reserveInstance = new web3.eth.Contract(ERC20Contract.abi, reserveCurrency);
+    const reserveBalance = await contract.methods.reserveBalance().call();
+    const whitelisted = await contract.methods.whiteList(account).call();
+    const members = await contract.methods.getMembers().call();
+    
+    this.setState({ isWhitelisted: whitelisted, members: members, owner: contractOwner, contractAddress: contract_address, reserveBalance: reserveBalance, reserveCurrency: reserveCurrency, reserveInstance: reserveInstance, contribution: contribution, membersNumber: count});
+
     if (contractOwner === account) {
       this.setState({ isOwner: true });
     }
 
-    const donationBalance = await contract.methods.donationBalance().call();
-    if (charity == account) {
-      this.setState({ isCharity: true, donationBalance: donationBalance })
-    }
-
     const memberBalance = await contract.methods.balanceOf(account).call();
     const id = await contract.methods.tokenId(account).call();
-    const count = await contract.methods.getMembersLength().call();
     if (parseInt(memberBalance) > 0) {
-      this.setState({ isMember: true, tokenID: id, membersNumber: count });
+      this.setState({ isMember: true, tokenID: id });
     }
   };
 
-  handleJoin(event) {
+  handleApprove(event) {
     this.instantiateContract();
-    const { account, contract, donation } = this.state;
+    const { account, isWhitelisted, contractAddress, reserveInstance, contribution } = this.state;
+    if(isWhitelisted) {
+    //user approving in JS
+      reserveInstance.methods
+        .approve(contractAddress, contribution) 
+        .send({ from: account })
+        .then((result) => {
+          console.log("tokens approved");
+          return this.runConnect();
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+  }
+
+  handleContribute(event) {
+    this.instantiateContract();
+    const { account, contract } = this.state;
     contract.methods
-      .newMember()
-      .send({ from: account, value: donation })
+      .contribute()
+      .send({ from: account })
       .then((result) => {
         return this.runConnect();
       });
   }
 
   handleAddressInput = (event) => {
-    this.setState({ input: event.target.value });
+    var array = event.target.value.split(',');
+    this.setState({ input: array });
   }
 
-  handleGift(event) {
+  handleWhitelist(event) {
     this.instantiateContract();
-    const { account, contract, input, donation } = this.state;
+    const { account, contract, input } = this.state;
     contract.methods
-      .giftMembership(input)
-      .send({ from: account, value: donation })
+      .whitelist(input)
+      .send({ from: account })
       .then((result) => {
+        const gasUsed = result.gasUsed;
+        console.log("handlewhitelist gasUsed", gasUsed);
+        this.setState({ gasUsed: gasUsed });
         return this.runConnect();
       });
   }
@@ -133,7 +155,7 @@ class App extends Component {
     this.instantiateContract();
     const { account, contract, input } = this.state;
     contract.methods
-      .removeMember(input)
+      .remove(input)
       .send({ from: account })
       .then((result) => {
         return this.runConnect();
@@ -199,15 +221,19 @@ class App extends Component {
       return (
         <div className="isOwner">
           <div className="row">
-            <h2>Your account owns this Membership contract!</h2>
-            <p>Membership Contract Address: {this.state.contractAddress}</p>
+            <h2>Your account owns this Citadel contract!</h2>
+            <h3>Citadel Name: {this.state.citadelName}</h3>
+            <p>Citadel Contract Address: {this.state.contractAddress}</p>
+            <p>The Reserve Currency is: {this.state.reserveCurrency}</p>
             <p>There are a total of {this.state.membersNumber} members</p>
-            <p>Charity Name: Rinkeby Demo</p>
-            <p>Charity Wallet: {this.state.charity}</p>
-            <img src={makeBlockie(this.state.contractAddress)} />
             <p>Your Wallet: {this.state.account}</p>
             <p>Your ETH Balance: {this.state.balance} ETH</p>
-            {/* <p>Your Membership tokenId is {this.state.tokenID} </p> */}
+            <p>Reserve balance (available to withdraw): {this.state.reserveBalance} </p>
+            <p>Gas spent Whitelisting: {this.state.gasUsed} gwei</p>
+            <button onClick={this.handleWithdraw.bind(this)}>
+                  Withdraw Reserves
+            </button>
+            <br></br>
             <h3>Member Management</h3>
             <p>Enter an Ethereum Address:</p>
             <input
@@ -217,11 +243,11 @@ class App extends Component {
               onChange={this.handleAddressInput}
             />
             <br></br>
-            <button onClick={this.handleGift.bind(this)}>
-              Gift Membership
+            <button onClick={this.handleWhitelist.bind(this)}>
+              Whitelist
             </button>
             <button onClick={this.handleRemove.bind(this)}>
-              Remove Member
+              Remove
             </button>
             <br></br>
             <div className="management">
@@ -238,6 +264,10 @@ class App extends Component {
                 Kill Contract
               </button>
             </div>
+            <div className="members">
+              <h3>Members List</h3>
+              <p>{this.state.members}</p>
+            </div>
           </div>
         </div>
       );
@@ -245,14 +275,13 @@ class App extends Component {
       return (
         <div className="App">
           <div className="row">
-            <p>Membership Contract: {this.state.contractAddress}</p>
-            <p>There are a total of {this.state.membersNumber} members</p>
-            <img src={makeBlockie(this.state.contractAddress)} />
-            <p>Thank you for your donation to [CharityName]</p>
-            <p>Charity Wallet: {this.state.charity}</p>
+            <h2>Thank you for your contribution to {this.state.citadelName}</h2>
+            <p>Citadel Contract: {this.state.contractAddress}</p>
+            <p>Citadel Owner: {this.state.owner}</p>
+            <p>The Reserve Currency is: {this.state.reserveCurrency}</p>
             <p>Your Wallet: {this.state.account}</p>
-            <p>Your ETH Balance: {this.state.balance} ETH</p>
-            <p>Your Membership tokenId is {this.state.tokenID} </p>
+            <p>Your {this.state.citadelName} NFT tokenId is {this.state.tokenID} </p>
+            <p>There are a total of {this.state.membersNumber} members</p>
             <p>
               Network ID:{" "}
               {this.state.network ? `${this.state.network}` : "No connection"}
@@ -260,16 +289,7 @@ class App extends Component {
           </div>
           <div className="row">
             <div className="pure-g">
-              <div className="pure-u-1-1">
-                <h3>Gift a Membership!</h3>
-                <p>Enter an Ethereum Address:</p>
-                <input
-                  type="text" size="50" id="address" onChange=
-                  {this.handleAddressInput}/>
-                <button onClick={this.handleGift.bind(this)}>
-                  Gift Membership
-                </button>
-              </div>
+
               <br></br>
               <img src='http://www.afrostateofmind.com/wp-content/uploads/2015/08/Members-only.png'
               height='300' width='450'/>
@@ -277,35 +297,22 @@ class App extends Component {
           </div>
         </div>
       );
-      else if (this.state.isCharity)
-      return (
-        <div className="App">
-          <div className="row">
-            <p>Membership Contract Address: {this.state.contractAddress}</p>
-            <p>There are a total of {this.state.membersNumber} members</p>
-            <img src={makeBlockie(this.state.contractAddress)}/>
-            <p>Welcome [CharityName]!</p>
-            <p>Your Charity's Wallet: {this.state.charity}</p>
-            <p>Your ETH Balance: {this.state.balance} ETH</p>
-            <p>
-              Network ID:{" "}
-              {this.state.network ? `${this.state.network}` : "No connection"}
-            </p>
-            <p>Charity Donations balance (available to withdraw): {this.state.donationBalance} Wei</p>
-            <button onClick={this.handleWithdraw.bind(this)}>
-                  Withdraw Donations
-                </button>
-          </div>
-        </div>
-      )
     else if (!this.state.isMember)
       return (
         <div className="notMember">
+          <h2>Welcome to: {this.state.citadelName}!</h2>
+          <p>Citadel Contract Address: {this.state.contractAddress}</p>
+          <p>The Reserve Currency is: {this.state.reserveCurrency}</p>
+          <p>There are currently {this.state.membersNumber} out of 80 maximum member contributions</p>
           You are not a Member yet
           <br></br>
-          <button onClick={this.handleJoin.bind(this)}>
-            Click to become a Member!
-          </button>
+          <button onClick={this.handleApprove.bind(this)}>
+            1. Approve USDC 
+          </button> Verify the approval amount matches the desired contribution
+          <br></br>
+          <button onClick={this.handleContribute.bind(this)}>
+            2. Send Contribution
+          </button> Verify the recipient address matches the Citadel Contract Address above
         </div>
       );
   }

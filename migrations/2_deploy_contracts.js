@@ -1,8 +1,8 @@
-var Membership = artifacts.require("./Membership.sol");
+var Citadel = artifacts.require("./Citadel.sol");
 const web3 = require('../node_modules/web3');
 
 module.exports = function(deployer) {
-  const charity = '0xD1953FE9BCB3Baf36b829Bd88347f87D25Eb87cA';
-  const donation = web3.utils.toWei('0.1', 'ether');
-  deployer.deploy(Membership, charity, donation);
+  const reserveCurrency = '0x4DBCdF9B62e891a7cec5A2568C3F4FAF9E8Abe2b'; //Rinkeby USDC contract
+  const contribution = 1000000; //Rinkeby USDC has 6 decimals, this is 10 USDC for testing purposes
+  deployer.deploy(Citadel, reserveCurrency, contribution);
 };

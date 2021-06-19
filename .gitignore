@@ -3,6 +3,7 @@
 .env
 
 # dependencies
+/test/citadel.js
 /node_modules
 /client/node_modules
 /.pnp
